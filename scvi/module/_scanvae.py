@@ -315,7 +315,12 @@ class SCANVAE(VAE): #inherits from VAE class (for instance inherits z_encoder)
 
         if labelled_tensors is not None:
             if self.n_version == 1:
-                loss = reconst_loss.mean()+loss_z1_weight.mean()+loss_z1_unweight.mean()+ kl_weight*(kl_divergence_z2.mean()+kl_divergence_l.mean())  # add kl terms here
+
+                loss_z1_weight_mean = loss_z1_weight.mean()
+                loss_z1_unweight_mean = loss_z1_unweight.mean()
+                kl_divergence_z2_mean = kl_divergence_z2.mean()
+                kl_divergence_l_mean = kl_divergence_l.mean()
+                loss = reconst_loss.mean()+loss_z1_weight_mean+loss_z1_unweight_mean+ kl_weight*(kl_divergence_z2_mean+kl_divergence_l_mean)  # add kl terms here
 
                 kl_locals = {
                     "kl_divergence_z2": kl_divergence_z2,  
@@ -327,6 +332,10 @@ class SCANVAE(VAE): #inherits from VAE class (for instance inherits z_encoder)
                     loss,
                     reconst_loss,
                     kl_locals,
+		    loss_z1_weight_mean = loss_z1_weight_mean,
+                    loss_z1_unweight_mean = loss_z1_unweight_mean,
+                    kl_divergence_z2_mean = kl_divergence_z2_mean,
+                    kl_divergence_l_mean = kl_divergence_l_mean,
                     classification_loss=classifier_loss,
                     n_labelled_tensors=labelled_tensors[REGISTRY_KEYS.X_KEY].shape[0],
                 )
@@ -340,23 +349,46 @@ class SCANVAE(VAE): #inherits from VAE class (for instance inherits z_encoder)
         kl_divergence = (kl_divergence_z2.view(self.n_labels, -1).t() * probs).sum(
             dim=1
         )
-        kl_divergence += kl(
+        kl_divergence_cat = kl(
             Categorical(probs=probs),
             Categorical(probs=self.y_prior.repeat(probs.size(0), 1)),
         )
+
+        kl_divergence += kl_divergence_cat
+
         kl_divergence += kl_divergence_l
 
-        loss = torch.mean(reconst_loss + kl_divergence * kl_weight) 
+        loss = torch.mean(reconst_loss + kl_divergence * kl_weight)
+
+        loss_z1_weight_mean = loss_z1_weight.mean()
+        loss_z1_unweight_mean = loss_z1_unweight.mean()
+        kl_divergence_z2_mean = kl_divergence_z2.mean()
+        kl_divergence_l_mean = kl_divergence_l.mean()
+        kl_divergence_cat_mean = kl_divergence_cat.mean()
+ 
 
         if labelled_tensors is not None:
-            if self._version == 0:
+            if self.n_version == 0:
                 classifier_loss = self.classification_loss(labelled_tensors)
                 loss += classifier_loss * classification_ratio
                 return LossRecorder(
                     loss,
                     reconst_loss,
                     kl_divergence,
+                    loss_z1_weight_mean = loss_z1_weight_mean,
+                    kl_divergence_cat_mean = kl_divergence_cat_mean,
+                    loss_z1_unweight_mean = loss_z1_unweight_mean,
+                    kl_divergence_z2_mean = kl_divergence_z2_mean,
+                    kl_divergence_l_mean = kl_divergence_l_mean,
                     classification_loss=classifier_loss,
                 )
+        print('Hi')
 
-        return LossRecorder(loss, reconst_loss, kl_divergence)
+        return LossRecorder(loss, reconst_loss, kl_divergence,  
+                    loss_z1_weight_mean = loss_z1_weight_mean,
+                    kl_divergence_cat_mean = kl_divergence_cat_mean,
+                    loss_z1_unweight_mean = loss_z1_unweight_mean,
+                    kl_divergence_z2_mean = kl_divergence_z2_mean,
+                    kl_divergence_l_mean = kl_divergence_l_mean,
+)
+
