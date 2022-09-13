@@ -382,6 +382,8 @@ class SCANVAE(VAE):  # inherits from VAE class (for instance inherits z_encoder)
                     classification_loss=classifier_loss,
                 )
         
+        # print('Hi')
+
         return LossRecorder(loss, reconst_loss, kl_divergence,  
                     loss_z1_weight_mean = loss_z1_weight_mean,
                     kl_divergence_cat_mean = kl_divergence_cat_mean,
