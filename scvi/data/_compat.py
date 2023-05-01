@@ -14,10 +14,12 @@ from .fields import (
     NumericalJointObsField,
     ProteinObsmField,
 )
-
+#labels_coarse would be the coarse level
+#labels would stay the finest labels 
 LEGACY_REGISTRY_KEY_MAP = {
     "X": REGISTRY_KEYS.X_KEY,
     "batch_indices": REGISTRY_KEYS.BATCH_KEY,
+    "labels_coarse": REGISTRY_KEYS.LABELS_COARSE,
     "labels": REGISTRY_KEYS.LABELS_KEY,
     "cat_covs": REGISTRY_KEYS.CAT_COVS_KEY,
     "cont_covs": REGISTRY_KEYS.CONT_COVS_KEY,
@@ -79,10 +81,8 @@ def registry_from_setup_dict(
 ) -> dict:
     """
     Converts old setup dict format to new registry dict format.
-
     Only to be used for backwards compatibility when loading setup dictionaries for models.
     Takes old hard-coded setup dictionary structure and fills in the analogous registry structure.
-
     Parameters
     ----------
     model_cls

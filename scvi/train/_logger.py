@@ -2,8 +2,7 @@ from typing import Any, Dict, Optional, Union
 
 import pandas as pd
 import torch
-from pytorch_lightning.loggers import LightningLoggerBase
-from pytorch_lightning.loggers.base import rank_zero_experiment
+from lightning.pytorch.loggers.logger import Logger, rank_zero_experiment
 from pytorch_lightning.utilities import rank_zero_only
 
 
@@ -45,7 +44,7 @@ class SimpleExperiment:
         pass
 
 
-class SimpleLogger(LightningLoggerBase):
+class SimpleLogger(Logger):
     def __init__(
         self, name: str = "lightning_logs", version: Optional[Union[int, str]] = None
     ):
