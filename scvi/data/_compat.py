@@ -14,8 +14,7 @@ from .fields import (
     NumericalJointObsField,
     ProteinObsmField,
 )
-#labels_coarse would be the coarse level
-#labels would stay the finest labels 
+
 LEGACY_REGISTRY_KEY_MAP = {
     "X": REGISTRY_KEYS.X_KEY,
     "batch_indices": REGISTRY_KEYS.BATCH_KEY,
