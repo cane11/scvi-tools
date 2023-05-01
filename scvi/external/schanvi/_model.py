@@ -16,18 +16,17 @@ from scvi.data._utils import get_anndata_attribute
 from scvi.data.fields import (
     CategoricalJointObsField,
     CategoricalObsField,
-    LabelsWithUnlabeledObsField,
     LayerField,
     NumericalJointObsField,
     NumericalObsField,
 )
-from scvi.dataloaders import SemiSupervisedDataSplitter
+from ._utils import HierarchicalSemiSupervisedDataSplitter
 from scvi.model._utils import _init_library_size
 from scvi.external.schanvi.module._schanvae import SCHANVAE
 from scvi.train import SemiSupervisedTrainingPlan, TrainRunner
 from scvi.train._callbacks import SubSampleLabels
 from scvi.utils import setup_anndata_dsp
-from ._utils import num_classes
+from ._utils import num_classes, LabelsWithUnlabeledJointObsField
 
 from scvi.model._scvi import SCVI
 from scvi.model.base import ArchesMixin, BaseModelClass, RNASeqMixin, VAEMixin
@@ -69,11 +68,11 @@ class SCHANVI(RNASeqMixin, VAEMixin, ArchesMixin, BaseModelClass):
     Examples
     --------
     >>> adata = anndata.read_h5ad(path_to_anndata)
-    >>> scvi.model.SCANVI.setup_anndata(adata, batch_key="batch", labels_key="labels")
-    >>> vae = scvi.model.SCANVI(adata, "Unknown")
-    >>> vae.train()
-    >>> adata.obsm["X_scVI"] = vae.get_latent_representation()
-    >>> adata.obs["pred_label"] = vae.predict()
+    >>> scvi.external.SCHANVI.setup_anndata(adata, labels=["labels_0", "labels_1"], unknown_categories=["unknown, "unknown"])
+    >>> model = scvi.external.SCHANVI(adata)
+    >>> model.train()
+    >>> adata.obsm["X_scHANVI"] = model.get_latent_representation()
+    >>> adata.obs["pred_label"] = model.predict()
 
     """
 
@@ -92,10 +91,6 @@ class SCHANVI(RNASeqMixin, VAEMixin, ArchesMixin, BaseModelClass):
         schanvae_model_kwargs = dict(model_kwargs)
 
         self._set_indices_and_labels()
-        # ignores unlabeled catgegory
-        # n_labels = self.summary_stats.n_labels - 1
-
-        # to add to parameters?
         self.num_classes = num_classes
 
         n_cats_per_cov = (
@@ -115,7 +110,7 @@ class SCHANVI(RNASeqMixin, VAEMixin, ArchesMixin, BaseModelClass):
             library_log_means, library_log_vars = _init_library_size(
                 self.adata_manager, n_batch
             )
-        # we get the num_classes from the hierarchy_dict file
+         # we get the num_classes from the hierarchy dict in _utils file
         self.module = SCHANVAE(
             n_input=self.summary_stats.n_vars,
             n_batch=n_batch,
@@ -141,7 +136,7 @@ class SCHANVI(RNASeqMixin, VAEMixin, ArchesMixin, BaseModelClass):
             "scHANVI Model with the following params: \nunlabeled_category: {}, n_hidden: {}, n_latent: {}"
             ", n_layers: {}, dropout_rate: {}, dispersion: {}, gene_likelihood: {}"
         ).format(
-            self.unlabeled_category_,
+            self.unlabeled_categories,
             n_hidden,
             n_latent,
             n_layers,
@@ -152,7 +147,7 @@ class SCHANVI(RNASeqMixin, VAEMixin, ArchesMixin, BaseModelClass):
         self.init_params_ = self._get_init_params(locals())
         self.was_pretrained = False
 
-    # to be modified if needed for more than 1 label field
+    #to be modified to fit with the obsm field 
     @classmethod
     def from_scvi_model(
         cls,
@@ -164,7 +159,7 @@ class SCHANVI(RNASeqMixin, VAEMixin, ArchesMixin, BaseModelClass):
         **schanvi_kwargs,
     ):
         """
-        Initialize scanVI model with weights from pretrained :class:`~scvi.model.SCVI` model.
+        Initialize schanVI model with weights from pretrained :class:`~scvi.model.SCVI` model.
         Parameters
         ----------
         scvi_model
@@ -227,33 +222,30 @@ class SCHANVI(RNASeqMixin, VAEMixin, ArchesMixin, BaseModelClass):
     def _set_indices_and_labels(self):
         """Set indices for labeled and unlabeled cells."""
 
-        labels_coarse_state_registry = self.adata_manager.get_state_registry(
-            REGISTRY_KEYS.LABELS_COARSE
-        )
         labels_state_registry = self.adata_manager.get_state_registry(
             REGISTRY_KEYS.LABELS_KEY
         )
-        self.original_label_key = labels_state_registry.original_key
-        self.unlabeled_category_ = labels_state_registry.unlabeled_category
-
+        self.original_layer_keys = labels_state_registry.field_keys
+        self.unlabeled_categories = labels_state_registry.unlabeled_categories
+        #Dataframe of 2 columns for the 2 layers of labels 
         labels = get_anndata_attribute(
             self.adata,
-            self.adata_manager.data_registry.labels.attr_name,
-            self.original_label_key,
-        ).ravel()
+            self.adata_manager.data_registry.labels.attr_name, #'obsm'
+            self.adata_manager.data_registry.labels.attr_key,
+        )
+       
+        self._label_mapping = labels_state_registry.mappings
 
-        self._label_mapping = labels_state_registry.categorical_mapping
-        self._label_coarse_mapping = labels_coarse_state_registry.categorical_mapping
+        # set unlabeled and labeled indices ; for now, a cell is unlabeled if it is not labeled at the finest state  
+        self._unlabeled_indices = np.where(labels.iloc[:,-1]==self.unlabeled_categories[-1])[0]
+        self._labeled_indices = np.where(labels.iloc[:,-1]!=self.unlabeled_categories[-1])[0]
+
+        #array of dict ; code to label for each layer 
+        self._code_to_label = [{} for layer in self._label_mapping] 
         
-        # set unlabeled and labeled indices ; for now we say that either a cell is fully labeled either it is not ; labeled_indices are common to both categories 
-        self._unlabeled_indices = np.argwhere(
-            labels == self.unlabeled_category_
-        ).ravel()
-        self._labeled_indices = np.argwhere(labels != self.unlabeled_category_).ravel()
-
-        self._code_to_label = {i: l for i, l in enumerate(self._label_mapping)}
-        self._code_to_label_coarse = {i: l for i, l in enumerate(self._label_coarse_mapping)}
-
+        for i, layer in enumerate(self._label_mapping) : 
+            self._code_to_label[i].update({n: l for n, l in enumerate(self._label_mapping[layer])})
+       
     def predict(
         self,
         adata: Optional[AnnData] = None,
@@ -314,23 +306,20 @@ class SCHANVI(RNASeqMixin, VAEMixin, ArchesMixin, BaseModelClass):
        
 
         if not soft:
-            predictions = [[] for i in range(total_level)]
+            predictions = [[] for l in range(total_level)]
             #fill the prediction array for both classes 
-
-            for p in y_pred[0]:
-                predictions[0].append(self._code_to_label_coarse[p])
-            for p in y_pred[1] :
-                predictions[1].append(self._code_to_label[p])
-
+            for l in range (total_level) : 
+                for p in y_pred[l]:
+                    predictions[l].append(self._code_to_label[l][p])
+        
             return np.array(predictions)
 
        
         else:
             for i in range (total_level):
-                n_labels = len(num_classes[i])
                 pred[i] = pd.DataFrame(
                     y_pred[i],
-                    columns=self._label_mapping[:n_labels],
+                    columns=self._label_mapping[self.original_layer_keys[i]],
                     index=adata.obs_names[indices],
                     )
             return pred
@@ -390,12 +379,11 @@ class SCHANVI(RNASeqMixin, VAEMixin, ArchesMixin, BaseModelClass):
 
         # if we have labeled cells, we want to subsample labels each epoch
         # sampling based on finer level of annotation
-        
         sampler_callback = (
             [SubSampleLabels()] if len(self._labeled_indices) != 0 else []
         )
 
-        data_splitter = SemiSupervisedDataSplitter(
+        data_splitter = HierarchicalSemiSupervisedDataSplitter(
             adata_manager=self.adata_manager,
             train_size=train_size,
             validation_size=validation_size,
@@ -425,9 +413,8 @@ class SCHANVI(RNASeqMixin, VAEMixin, ArchesMixin, BaseModelClass):
     def setup_anndata(
         cls,
         adata: AnnData,
-        labels_coarse: str,
-        labels: str,
-        unlabeled_category: Union[str, int, float],
+        labels: List[str],
+        unlabeled_categories: List[Union[str, int, float]],
         layer: Optional[str] = None,
         batch_key: Optional[str] = None,
         size_factor_key: Optional[str] = None,
@@ -447,13 +434,12 @@ class SCHANVI(RNASeqMixin, VAEMixin, ArchesMixin, BaseModelClass):
         %(param_cont_cov_keys)s
         """
         setup_method_args = cls._get_setup_method_args(**locals())
-        #should layer_coars be an labels with unlabeledobs field ? 
         anndata_fields = [
             LayerField(REGISTRY_KEYS.X_KEY, layer, is_count_data=True),
             CategoricalObsField(REGISTRY_KEYS.BATCH_KEY, batch_key),
-            CategoricalObsField(REGISTRY_KEYS.LABELS_COARSE, labels_coarse),
-            LabelsWithUnlabeledObsField(
-                REGISTRY_KEYS.LABELS_KEY, labels, unlabeled_category
+
+            LabelsWithUnlabeledJointObsField(
+                REGISTRY_KEYS.LABELS_KEY, labels, unlabeled_categories
             ),
             NumericalObsField(
                 REGISTRY_KEYS.SIZE_FACTOR_KEY, size_factor_key, required=False

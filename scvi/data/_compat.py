@@ -19,7 +19,6 @@ from .fields import (
 LEGACY_REGISTRY_KEY_MAP = {
     "X": REGISTRY_KEYS.X_KEY,
     "batch_indices": REGISTRY_KEYS.BATCH_KEY,
-    "labels_coarse": REGISTRY_KEYS.LABELS_COARSE,
     "labels": REGISTRY_KEYS.LABELS_KEY,
     "cat_covs": REGISTRY_KEYS.CAT_COVS_KEY,
     "cont_covs": REGISTRY_KEYS.CONT_COVS_KEY,

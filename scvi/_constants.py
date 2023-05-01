@@ -4,7 +4,6 @@ from typing import NamedTuple
 class _REGISTRY_KEYS_NT(NamedTuple):
     X_KEY: str = "X"
     BATCH_KEY: str = "batch"
-    LABELS_COARSE: str = "labels_coarse"
     LABELS_KEY: str = "labels"
     PROTEIN_EXP_KEY: str = "proteins"
     CAT_COVS_KEY: str = "extra_categorical_covs"

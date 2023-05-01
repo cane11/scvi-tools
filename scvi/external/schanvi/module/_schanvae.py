@@ -17,9 +17,9 @@ from scvi.module._utils import broadcast_labels
 from scvi.module._vae import VAE
 
 
-class SCHANVAE(VAE):  # inherits from VAE class (for instance inherits z_encoder)
+class SCHANVAE(VAE):  
     """
-        Single-cell annotation using variational inference.
+        Single-cell hierarchical annotation using variational inference.
     x
         This is an implementation of the scANVI model described in [Xu21]_,
         inspired from M1 + M2 model, as described in (https://arxiv.org/pdf/1406.5298.pdf).
@@ -136,7 +136,7 @@ class SCHANVAE(VAE):  # inherits from VAE class (for instance inherits z_encoder
             use_layer_norm=use_layer_norm_encoder,
             **cls_parameters
         )
-
+        #n_cat_list should be modified ? 
         self.encoder_z2_z1 = Encoder(  # q(z2|z1,....)
             n_latent,
             n_latent,
@@ -228,9 +228,7 @@ class SCHANVAE(VAE):  # inherits from VAE class (for instance inherits z_encoder
     def classification_loss(self, labelled_dataset):
         # add a classification loss ON THE LABELLED DATA, following Kingma et al
         x = labelled_dataset[REGISTRY_KEYS.X_KEY]
-        #does that work if we haven't registered an unlabeled category for y_1
-        y_1 = labelled_dataset[REGISTRY_KEYS.LABELS_COARSE]
-        y_2 = labelled_dataset[REGISTRY_KEYS.LABELS_KEY]
+        y = labelled_dataset[REGISTRY_KEYS.LABELS_KEY]
         batch_idx = labelled_dataset[REGISTRY_KEYS.BATCH_KEY]
         cont_key = REGISTRY_KEYS.CONT_COVS_KEY
         cont_covs = (
@@ -244,12 +242,16 @@ class SCHANVAE(VAE):  # inherits from VAE class (for instance inherits z_encoder
         predictions = self.classify(
             x, batch_index=batch_idx, cat_covs=cat_covs, cont_covs=cont_covs
         )
+        total_level = len(self.num_classes)
+        true_labels = [] 
+        for i in range (total_level) :
+            labels_curr_level = y[:, i].view(-1).long() 
+            true_labels.append(labels_curr_level)
 
-        #true_labels is a tuple of tensors 
-        true_labels = (y_1.view(-1).long(), y_2.view(-1).long())
         HLN = HierarchicalLossNetwork(
             n_input=self.n_latent, hierarchical_labels=hierarchy, num_classes = self.num_classes, device=x.device
         )
+
         dloss = HLN.calculate_dloss(predictions, true_labels)
         lloss = HLN.calculate_lloss(predictions, true_labels)
         classification_loss = dloss + lloss
@@ -274,9 +276,13 @@ class SCHANVAE(VAE):  # inherits from VAE class (for instance inherits z_encoder
         x = tensors[REGISTRY_KEYS.X_KEY]
         batch_index = tensors[REGISTRY_KEYS.BATCH_KEY]
 
-        # for now y is only the finer level --> find a way to modify y to adapt to the hierarchy ? 
+        # for now y is only the finest level --> need to adapt it 
         if feed_labels:
             y = tensors[REGISTRY_KEYS.LABELS_KEY]
+            #only the fine labels to adapt it for broadcast_labels
+            y=y[:,-1]
+            print("feed_labels=True")
+
         else:
             y = None
 
@@ -284,7 +290,6 @@ class SCHANVAE(VAE):  # inherits from VAE class (for instance inherits z_encoder
 
         # Enumerate choices of label
         # one-hot encoding of the labels
-        #how to modify it to for the hierarchy?
         ys, z1s = broadcast_labels(y, z1, n_broadcast=self.n_labels)
         # if z1 is of size (batch_size,latent), z1_s is of size (n_labels*batch_size,latent)
         qz2_m, qz2_v, z2 = self.encoder_z2_z1(z1s, ys)  # q(z2|z1,..)
