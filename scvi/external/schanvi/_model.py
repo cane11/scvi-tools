@@ -152,7 +152,6 @@ class SCHANVI(RNASeqMixin, VAEMixin, ArchesMixin, BaseModelClass):
         self.init_params_ = self._get_init_params(locals())
         self.was_pretrained = False
 
-    # to be modified if needed for more than 1 label field
     @classmethod
     def from_scvi_model(
         cls,
