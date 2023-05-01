@@ -138,7 +138,7 @@ class SCHANVI(RNASeqMixin, VAEMixin, ArchesMixin, BaseModelClass):
         self.semisupervised_history_ = None
 
         self._model_summary_string = (
-            "ScanVI Model with the following params: \nunlabeled_category: {}, n_hidden: {}, n_latent: {}"
+            "scHANVI Model with the following params: \nunlabeled_category: {}, n_hidden: {}, n_latent: {}"
             ", n_layers: {}, dropout_rate: {}, dispersion: {}, gene_likelihood: {}"
         ).format(
             self.unlabeled_category_,
@@ -158,9 +158,10 @@ class SCHANVI(RNASeqMixin, VAEMixin, ArchesMixin, BaseModelClass):
         cls,
         scvi_model: SCVI,
         unlabeled_category: str,
-        labels_key: Optional[str] = None,
+        labels_coarse: str,
+        labels: Optional[str] = None,
         adata: Optional[AnnData] = None,
-        **scanvi_kwargs,
+        **schanvi_kwargs,
     ):
         """
         Initialize scanVI model with weights from pretrained :class:`~scvi.model.SCVI` model.
@@ -183,18 +184,18 @@ class SCHANVI(RNASeqMixin, VAEMixin, ArchesMixin, BaseModelClass):
             message="Passed in scvi model hasn't been trained yet."
         )
 
-        scanvi_kwargs = dict(scanvi_kwargs)
+        schanvi_kwargs = dict(schanvi_kwargs)
         init_params = scvi_model.init_params_
         non_kwargs = init_params["non_kwargs"]
         kwargs = init_params["kwargs"]
         kwargs = {k: v for (i, j) in kwargs.items() for (k, v) in j.items()}
         for k, v in {**non_kwargs, **kwargs}.items():
-            if k in scanvi_kwargs.keys():
+            if k in schanvi_kwargs.keys():
                 warnings.warn(
                     "Ignoring param '{}' as it was already passed in to ".format(k)
                     + "pretrained scvi model with value {}.".format(v)
                 )
-                del scanvi_kwargs[k]
+                del schanvi_kwargs[k]
 
         if adata is None:
             adata = scvi_model.adata
@@ -204,23 +205,24 @@ class SCHANVI(RNASeqMixin, VAEMixin, ArchesMixin, BaseModelClass):
 
         scvi_setup_args = deepcopy(scvi_model.adata_manager.registry[_SETUP_ARGS_KEY])
         scvi_labels_key = scvi_setup_args["labels_key"]
-        if labels_key is None and scvi_labels_key is None:
+        if labels is None and scvi_labels_key is None:
             raise ValueError(
                 "A `labels_key` is necessary as the SCVI model was initialized without one."
             )
         if scvi_labels_key is None:
-            scvi_setup_args.update(dict(labels_key=labels_key))
+            scvi_setup_args.update(dict(labels=labels))
         cls.setup_anndata(
             adata,
             unlabeled_category=unlabeled_category,
+            labels_coarse=labels_coarse,
             **scvi_setup_args,
         )
-        scanvi_model = cls(adata, **non_kwargs, **kwargs, **scanvi_kwargs)
+        schanvi_model = cls(adata, **non_kwargs, **kwargs, **schanvi_kwargs)
         scvi_state_dict = scvi_model.module.state_dict()
-        scanvi_model.module.load_state_dict(scvi_state_dict, strict=False)
-        scanvi_model.was_pretrained = True
+        schanvi_model.module.load_state_dict(scvi_state_dict, strict=False)
+        schanvi_model.was_pretrained = True
 
-        return scanvi_model
+        return schanvi_model
 
     def _set_indices_and_labels(self):
         """Set indices for labeled and unlabeled cells."""
