@@ -147,10 +147,7 @@ class SCHANVI(RNASeqMixin, VAEMixin, ArchesMixin, BaseModelClass):
         self.init_params_ = self._get_init_params(locals())
         self.was_pretrained = False
 
-<<<<<<< HEAD
     #to be modified to fit with the obsm field 
-=======
->>>>>>> b1a674894a53490b8c2adef64ff4491dc6c7f4b0
     @classmethod
     def from_scvi_model(
         cls,
