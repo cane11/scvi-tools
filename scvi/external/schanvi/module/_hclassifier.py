@@ -32,7 +32,7 @@ class Hierarchical_Classifier(nn.Module):
     def __init__(
         self,
         n_input: int,
-        num_classes: list,
+        num_classes: list[int],
         n_output: int = 20,
         # modify the default of n_hidden?
         n_hidden: int = 128,
@@ -60,7 +60,7 @@ class Hierarchical_Classifier(nn.Module):
                 use_layer_norm= use_layer_norm,
                 activation_fn=activation_fn,
             ),
-            nn.Linear(n_hidden, n_output),
+            nn.Linear(n_hidden, n_output), 
         ]
 
         # independant representation level 2 of root level
@@ -75,7 +75,7 @@ class Hierarchical_Classifier(nn.Module):
                 use_layer_norm= use_layer_norm,
                 activation_fn=activation_fn,
             ),
-            nn.Linear(n_hidden, n_output),
+            nn.Linear(n_hidden, n_output), 
         ]
         # neural networks to obtain independant representations of dim n_output :
         self.lvl_2 = nn.Sequential(*layers_2)
@@ -90,13 +90,15 @@ class Hierarchical_Classifier(nn.Module):
             )
 
         else :
-            self.output1= nn.Linear(n_output, num_classes[0])
-            self.output2 = nn.Linear(n_output + n_output, num_classes[1])
+            self.output1= nn.Linear(n_output, num_classes[0]) 
+            self.output2 = nn.Linear(n_output + n_output, num_classes[1]) 
 
     def forward(self, x):
-        level_1 = self.output1(self.lvl_1(x))
+        lvl_1_independant = self.lvl_1(x)
+        lvl_2_independant = self.lvl_2(x)
+        level_1 = self.output1(lvl_1_independant)
         # concatenation of independant representations for level 2
-        level_2 = self.output2(torch.cat((self.lvl_1(x), self.lvl_2(x)), dim=1))
+        level_2 = self.output2(torch.cat((lvl_1_independant, lvl_2_independant), dim=1))
         return level_1, level_2
 
 
